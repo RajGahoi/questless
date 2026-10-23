@@ -133,10 +133,14 @@ class TownConfig:
     # Higher brackets as (threshold, rate), ascending: coin above each threshold pays that rate
     # instead of the one below it. Empty means one flat rate above upkeep_exempt (M58.3).
     levy_brackets: tuple[tuple[int, float], ...] = ()
+    # If town coin < reserve_days * daily_wages, emergency upkeep applies (M13.12).
+    reserve_days: int = 0
+    reserve_rate: float = 0.04  # emergency upkeep rate while below reserve floor
 
-    def levy(self, coin: int) -> int:
+    def levy(self, coin: int, rate_override: float | None = None) -> int:
         """The day's upkeep on ``coin``, each bracket taxing only the coin that falls in it."""
-        bands = [(self.upkeep_exempt, self.upkeep_rate), *self.levy_brackets]
+        base_rate = rate_override if rate_override is not None else self.upkeep_rate
+        bands = [(self.upkeep_exempt, base_rate), *self.levy_brackets]
         owed = 0.0
         for i, (threshold, rate) in enumerate(bands):
             top = bands[i + 1][0] if i + 1 < len(bands) else coin
@@ -442,7 +446,7 @@ def _parse(data: Mapping[str, Any]) -> ScenarioConfig:
         town,
         "town",
         required={"treasury", "guard_wage", "market_tax", "upkeep_rate", "upkeep_exempt"},
-        optional={"levy_brackets"},
+        optional={"levy_brackets", "reserve_days", "reserve_rate"},
     )
     player = data["player"]
     _keys(player, "player", required={"wallet", "caravan_markup"})
@@ -468,6 +472,8 @@ def _parse(data: Mapping[str, Any]) -> ScenarioConfig:
             upkeep_rate=_fraction(town["upkeep_rate"], "town.upkeep_rate"),
             upkeep_exempt=_nonneg_int(town["upkeep_exempt"], "town.upkeep_exempt"),
             levy_brackets=_levy_brackets(town),
+            reserve_days=_nonneg_int(town.get("reserve_days", 0), "town.reserve_days"),
+            reserve_rate=_fraction(town.get("reserve_rate", 0.04), "town.reserve_rate"),
         ),
         player_wallet=_nonneg_int(player["wallet"], "player.wallet"),
         caravan_markup=_at_least(player["caravan_markup"], 1.0, "player.caravan_markup"),

@@ -130,8 +130,16 @@ class World:
         forever. Returns the levy paid by each guild."""
         town = self.config.town
         rate = town.upkeep_rate
+        # Emergency reserve target: if town coin falls below reserve_days * daily_wages,
+        # apply emergency reserve_rate (M13.12)
+        if town.reserve_days > 0:
+            guards = self.npcs_by_profession(Profession.GUARD)
+            daily_wages = len(guards) * town.guard_wage
+            if self.ledger.balance(TOWN, Asset.COIN) < town.reserve_days * daily_wages:
+                rate = town.reserve_rate
+
         for npc in self.npcs_in_order():
-            levy = town.levy(self.ledger.balance(npc.account, Asset.COIN))
+            levy = town.levy(self.ledger.balance(npc.account, Asset.COIN), rate_override=rate)
             self.ledger.transfer(
                 npc.account, TOWN, Asset.COIN, levy, tick=self.tick, reason="upkeep"
             )
